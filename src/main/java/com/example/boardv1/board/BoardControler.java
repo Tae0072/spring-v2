@@ -8,7 +8,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 
+import com.example.boardv1.user.User;
+
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -16,17 +19,27 @@ import lombok.RequiredArgsConstructor;
 public class BoardControler {
 
     private final BoardService boardService;
+    private final HttpSession session; // session은 해시맵
 
     // body : title=title7&content=content7 (x-www-form)
     @PostMapping("/boards/save")
     public String save(BoardRequest.SaveOrUpdateDTO reqDTO) throws IOException {
-        boardService.게시글쓰기(reqDTO.getTitle(), reqDTO.getContent());
+        // 인증(o),권한(x)
+        User sessionUser = (User) session.getAttribute("sessionUser");
+        if (sessionUser == null)
+            throw new RuntimeException("인증되지 않았습니다.");
+        boardService.게시글쓰기(reqDTO.getTitle(), reqDTO.getContent(), sessionUser);
         return "redirect:/";
     }
 
     @PostMapping("/boards/{id}/update")
     public String update(@PathVariable("id") int id, BoardRequest.SaveOrUpdateDTO reqDto) {
-        boardService.게시글수정(id, reqDto.getTitle(), reqDto.getContent());
+        // 인증(o),권한(o)
+        User sessionUser = (User) session.getAttribute("sessionUser");
+        if (sessionUser == null)
+            throw new RuntimeException("인증되지 않았습니다.");
+
+        boardService.게시글수정(id, reqDto.getTitle(), reqDto.getContent(), sessionUser.getId());
         return "redirect:/boards/" + id;
     }
 
@@ -39,26 +52,42 @@ public class BoardControler {
 
     @GetMapping("/boards/save-form")
     public String saveForm() {
+        // 인증(o),권한(x)
+        User sessionUser = (User) session.getAttribute("sessionUser");
+        if (sessionUser == null)
+            throw new RuntimeException("인증되지 않았습니다.");
         return "board/save-form";
     }
 
     @GetMapping("/boards/{id}/update-form")
     public String updateForm(@PathVariable("id") int id, HttpServletRequest req) {
-        Board board = boardService.상세보기(id);
+        // 인증(o),권한(o)
+        User sessionUser = (User) session.getAttribute("sessionUser");
+        if (sessionUser == null)
+            throw new RuntimeException("인증되지 않았습니다.");
+
+        Board board = boardService.수정폼게시글정보(id, sessionUser.getId());
         req.setAttribute("model", board);
         return "board/update-form";
     }
 
     @GetMapping("/boards/{id}")
     public String detail(@PathVariable("id") int id, HttpServletRequest req) {
-        Board board = boardService.상세보기(id);
-        req.setAttribute("model", board);
+        User sessionUser = (User) session.getAttribute("sessionUser");
+        Integer sessionUserId = sessionUser == null ? null : sessionUser.getId();
+        BoardResponse.DetailDTO dto = boardService.상세보기(id, sessionUserId);
+        req.setAttribute("model", dto);
         return "board/detail";
     }
 
     @PostMapping("/boards/{id}/delete")
     public String delete(@PathVariable("id") int id) {
-        boardService.게시글삭제(id);
+        // 인증(o) - sessionUser,권한(o) - BD정보
+        User sessionUser = (User) session.getAttribute("sessionUser");
+        if (sessionUser == null)
+            throw new RuntimeException("인증되지 않았습니다.");
+
+        boardService.게시글삭제(id, sessionUser.getId());
         return "redirect:/";
     }
 }
